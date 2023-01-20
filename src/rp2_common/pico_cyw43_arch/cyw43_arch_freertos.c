@@ -101,6 +101,9 @@ static void cyw43_task(__unused void *param) {
         xSemaphoreGive(cyw43_worker_ran_sem);
         __sev(); // it is possible regular code is waiting on a WFE on the other core
     } while (true);
+    // https://github.com/raspberrypi/pico-sdk/pull/962
+    // https://github.com/raspberrypi/pico-sdk/pull/962/commits/a0a14e9233927b5ea6de8d55eab7a1171f4f99c1
+    vTaskDelete(NULL);
 }
 
 static void tcpip_init_done(void *param) {

@@ -15,7 +15,17 @@
 
 extern void __unhandled_user_irq(void);
 
+#if PICO_VTABLE_PER_CORE
 static uint8_t user_irq_claimed[NUM_CORES];
+static inline uint8_t *user_irq_claimed_ptr(void) {
+    return &user_irq_claimed[get_core_num()];
+}
+#else
+static uint8_t user_irq_claimed;
+static inline uint8_t *user_irq_claimed_ptr(void) {
+    return &user_irq_claimed;
+}
+#endif
 
 static inline irq_handler_t *get_vtable(void) {
     return (irq_handler_t *) scb_hw->vtor;
@@ -31,7 +41,7 @@ static inline void *remove_thumb_bit(void *addr) {
 
 static void set_raw_irq_handler_and_unlock(uint num, irq_handler_t handler, uint32_t save) {
     // update vtable (vtable_handler may be same or updated depending on cases, but we do it anyway for compactness)
-    get_vtable()[16 + num] = handler;
+    get_vtable()[VTABLE_FIRST_IRQ + num] = handler;
     __dmb();
     spin_unlock(spin_lock_instance(PICO_SPINLOCK_ID_IRQ), save);
 }
@@ -213,7 +223,7 @@ void irq_add_shared_handler(uint num, irq_handler_t handler, uint8_t order_prior
         struct irq_handler_chain_slot slot_data = {
                 .inst1 = 0xa100,                                                    // add r1, pc, #0
                 .inst2 = make_branch(&slot->inst2, irq_handler_chain_first_slot),   // b irq_handler_chain_first_slot
-                .inst3 = 0xbd00,                                                    // pop {pc}
+                .inst3 = 0xbd01,                                                    // pop {r0, pc}
                 .link = -1,
                 .priority = order_priority,
                 .handler = handler
@@ -237,7 +247,7 @@ void irq_add_shared_handler(uint num, irq_handler_t handler, uint8_t order_prior
                     .inst2 = 0x4780,                                                        // blx r0
                     .inst3 = prev_slot->link >= 0 ?
                             make_branch(&slot->inst3, resolve_branch(&prev_slot->inst3)) : // b next_slot
-                            0xbd00,                                                        // pop {pc}
+                            0xbd01,                                                        // pop {r0, pc}
                     .link = prev_slot->link,
                     .priority = order_priority,
                     .handler = handler
@@ -296,7 +306,7 @@ void irq_remove_handler(uint num, irq_handler_t handler) {
             // Sadly this is not something we can detect.
 
             uint exception = __get_current_exception();
-            hard_assert(!exception || exception == num + 16);
+            hard_assert(!exception || exception == num + VTABLE_FIRST_IRQ);
 
             struct irq_handler_chain_slot *prev_slot = NULL;
             struct irq_handler_chain_slot *existing_vtable_slot = remove_thumb_bit(vtable_handler);
@@ -319,7 +329,7 @@ void irq_remove_handler(uint num, irq_handler_t handler) {
                     to_free_slot->link = next_slot->link;
                     to_free_slot->inst3 = next_slot->link >= 0 ?
                             make_branch(&to_free_slot->inst3, resolve_branch(&next_slot->inst3)) : // b mext_>slot->next_slot
-                            0xbd00;                                                                // pop {pc}
+                            0xbd01;                                                                // pop {r0, pc}
 
                     // add old next slot back to free list
                     next_slot->link = irq_hander_chain_free_slot_head;
@@ -331,7 +341,7 @@ void irq_remove_handler(uint num, irq_handler_t handler) {
                         if (prev_slot) {
                             // chain is not empty
                             prev_slot->link = -1;
-                            prev_slot->inst3 = 0xbd00; // pop {pc}
+                            prev_slot->inst3 = 0xbd01; // pop {r0, pc}
                         } else {
                             // chain is not empty
                             vtable_handler = __unhandled_user_irq;
@@ -400,7 +410,7 @@ void irq_add_tail_to_free_list(struct irq_handler_chain_slot *slot) {
         for(uint i=0;i<count_of(irq_handler_chain_slots);i++) {
             if (irq_handler_chain_slots[i].link == slot_index) {
                 irq_handler_chain_slots[i].link = -1;
-                irq_handler_chain_slots[i].inst3 = 0xbd00; // pop {pc}
+                irq_handler_chain_slots[i].inst3 = 0xbd01; // pop {r0, pc}
                 found = true;
                 break;
             }
@@ -425,8 +435,6 @@ void irq_init_priorities() {
 #endif
 }
 
-#define FIRST_USER_IRQ (NUM_IRQS - NUM_USER_IRQS)
-
 static uint get_user_irq_claim_index(uint irq_num) {
     invalid_params_if(IRQ, irq_num < FIRST_USER_IRQ || irq_num >= NUM_IRQS);
     // we count backwards from the last, to match the existing hard coded uses of user IRQs in the SDK which were previously using 31
@@ -435,20 +443,20 @@ static uint get_user_irq_claim_index(uint irq_num) {
 }
 
 void user_irq_claim(uint irq_num) {
-    hw_claim_or_assert(&user_irq_claimed[get_core_num()], get_user_irq_claim_index(irq_num), "User IRQ is already claimed");
+    hw_claim_or_assert(user_irq_claimed_ptr(), get_user_irq_claim_index(irq_num), "User IRQ is already claimed");
 }
 
 void user_irq_unclaim(uint irq_num) {
-    hw_claim_clear(&user_irq_claimed[get_core_num()], get_user_irq_claim_index(irq_num));
+    hw_claim_clear(user_irq_claimed_ptr(), get_user_irq_claim_index(irq_num));
 }
 
 int user_irq_claim_unused(bool required) {
-    int bit = hw_claim_unused_from_range(&user_irq_claimed[get_core_num()], required, 0, NUM_USER_IRQS - 1, "No user IRQs are available");
+    int bit = hw_claim_unused_from_range(user_irq_claimed_ptr(), required, 0, NUM_USER_IRQS - 1, "No user IRQs are available");
     if (bit >= 0) bit =  (int)NUM_IRQS - bit - 1;
     return bit;
 }
 
 bool user_irq_is_claimed(uint irq_num) {
-    return hw_is_claimed(&user_irq_claimed[get_core_num()], get_user_irq_claim_index(irq_num));
+    return hw_is_claimed(user_irq_claimed_ptr(), get_user_irq_claim_index(irq_num));
 }
 

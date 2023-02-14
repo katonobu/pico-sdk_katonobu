@@ -7,15 +7,18 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <sys/stat.h>
 
 #include "pico.h"
-#include "pico/mutex.h"
 #if LIB_PICO_PRINTF_PICO
 #include "pico/printf.h"
 #endif
 #include "pico/stdio.h"
 #include "pico/stdio/driver.h"
 #include "pico/time.h"
+#if PICO_STDOUT_MUTEX
+#include "pico/mutex.h"
+#endif
 
 #if LIB_PICO_STDIO_UART
 #include "pico/stdio_uart.h"
@@ -40,18 +43,7 @@ static stdio_driver_t *filter;
 auto_init_mutex(print_mutex);
 
 bool stdout_serialize_begin(void) {
-    lock_owner_id_t caller = lock_get_caller_owner_id();
-    // not using lock_owner_id_t to avoid backwards incompatibility change to mutex_try_enter API
-    static_assert(sizeof(lock_owner_id_t) <= 4, "");
-    uint32_t owner;
-    if (!mutex_try_enter(&print_mutex, &owner)) {
-        if (owner == (uint32_t)caller) {
-            return false;
-        }
-        // we are not a nested call, so lets wait
-        mutex_enter_blocking(&print_mutex);
-    }
-    return true;
+    return mutex_try_enter_block_until(&print_mutex, make_timeout_time_ms(PICO_STDIO_DEADLOCK_TIMEOUT_MS));
 }
 
 void stdout_serialize_end(void) {
@@ -170,19 +162,39 @@ int puts_raw(const char *s) {
     return len;
 }
 
-int _read(int handle, char *buffer, int length) {
+int __attribute__((weak)) _read(int handle, char *buffer, int length) {
     if (handle == STDIO_HANDLE_STDIN) {
         return stdio_get_until(buffer, length, at_the_end_of_time);
     }
     return -1;
 }
 
-int _write(int handle, char *buffer, int length) {
+int __attribute__((weak)) _write(int handle, char *buffer, int length) {
     if (handle == STDIO_HANDLE_STDOUT || handle == STDIO_HANDLE_STDERR) {
         stdio_put_string(buffer, length, false, false);
         return length;
     }
     return -1;
+}
+
+int __attribute__((weak)) _open(__unused const char *fn, __unused int oflag, ...) {
+    return -1;
+}
+
+int __attribute__((weak)) _close(__unused int fd) {
+    return -1;
+}
+
+off_t __attribute__((weak)) _lseek(__unused int fd, __unused off_t pos, __unused int whence) {
+    return -1;
+}
+
+int __attribute__((weak)) _fstat(__unused int fd, __unused struct stat *buf) {
+    return -1;
+}
+
+int __attribute__((weak)) _isatty(int fd) {
+    return fd == STDIO_HANDLE_STDIN || fd == STDIO_HANDLE_STDOUT || fd == STDIO_HANDLE_STDERR;
 }
 
 void stdio_set_driver_enabled(stdio_driver_t *driver, bool enable) {
@@ -241,7 +253,8 @@ int WRAPPER_FUNC(vprintf)(const char *format, va_list va) {
     }
     int ret;
 #if LIB_PICO_PRINTF_PICO
-    struct stdio_stack_buffer buffer = {.used = 0};
+    struct stdio_stack_buffer buffer;
+    buffer.used = 0;
     ret = vfctprintf(stdio_buffered_printer, &buffer, format, va);
     stdio_stack_buffer_flush(&buffer);
     stdio_flush();
@@ -267,20 +280,25 @@ int __printflike(1, 0) WRAPPER_FUNC(printf)(const char* format, ...)
     return ret;
 }
 
-void stdio_init_all(void) {
+bool stdio_init_all(void) {
     // todo add explicit custom, or registered although you can call stdio_enable_driver explicitly anyway
     // These are well known ones
+
+    bool rc = false;
 #if LIB_PICO_STDIO_UART
     stdio_uart_init();
+    rc = true;
 #endif
 
 #if LIB_PICO_STDIO_SEMIHOSTING
     stdio_semihosting_init();
+    rc = true;
 #endif
 
 #if LIB_PICO_STDIO_USB
-    stdio_usb_init();
+    rc |= stdio_usb_init();
 #endif
+    return rc;
 }
 
 int WRAPPER_FUNC(getchar)(void) {
@@ -310,6 +328,16 @@ void stdio_set_translate_crlf(stdio_driver_t *driver, bool enabled) {
     }
     driver->crlf_enabled = enabled;
 #else
+    // Suppress -Wunused-parameter
+    (void)driver;
+    (void)enabled;
+    
     panic_unsupported();
 #endif
+}
+
+void stdio_set_chars_available_callback(void (*fn)(void*), void *param) {
+    for (stdio_driver_t *s = drivers; s; s = s->next) {
+        if (s->set_chars_available_callback) s->set_chars_available_callback(fn, param);
+    }
 }

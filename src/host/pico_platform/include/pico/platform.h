@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef _PICO_PLATFORM_H_
-#define _PICO_PLATFORM_H_
+#ifndef _PICO_PLATFORM_H
+#define _PICO_PLATFORM_H
 
 #include "hardware/platform_defs.h"
+#include <stdint.h>
 #include <stddef.h>
 
 #ifdef __unix__
@@ -142,6 +143,9 @@ static inline void __compiler_memory_barrier(void) {
 
 uint get_core_num();
 
+static inline uint __get_current_exception(void) {
+    return 0;
+}
 #ifdef __cplusplus
 }
 #endif

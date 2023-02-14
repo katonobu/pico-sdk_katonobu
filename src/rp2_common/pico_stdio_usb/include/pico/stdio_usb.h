@@ -97,6 +97,21 @@
 #define PICO_STDIO_USB_RESET_RESET_TO_FLASH_DELAY_MS 100
 #endif
 
+// PICO_CONFIG: PICO_STDIO_USB_CONNECTION_WITHOUT_DTR, Disable use of DTR for connection checking meaning connection is assumed to be valid, type=bool, default=0, group=pico_stdio_usb
+#ifndef PICO_STDIO_USB_CONNECTION_WITHOUT_DTR
+#define PICO_STDIO_USB_CONNECTION_WITHOUT_DTR 0
+#endif
+
+// PICO_CONFIG: PICO_STDIO_USB_DEVICE_SELF_POWERED, Set USB device as self powered device, type=bool, default=0, group=pico_stdio_usb
+#ifndef PICO_STDIO_USB_DEVICE_SELF_POWERED
+#define PICO_STDIO_USB_DEVICE_SELF_POWERED 0
+#endif
+
+// PICO_CONFIG: PICO_STDIO_USB_SUPPORT_CHARS_AVAILABLE_CALLBACK, Enable USB STDIO support for stdio_set_chars_available_callback. Can be disabled to make use of USB CDC RX callback elsewhere, type=bool default=1, group=pico_stdio_usb
+#ifndef PICO_STDIO_USB_SUPPORT_CHARS_AVAILABLE_CALLBACK
+#define PICO_STDIO_USB_SUPPORT_CHARS_AVAILABLE_CALLBACK 1
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef _HARDWARE_IRQ_H_
-#define _HARDWARE_IRQ_H_
+#ifndef _HARDWARE_IRQ_H
+#define _HARDWARE_IRQ_H
 
 // These two config items are also used by assembler, so keeping separate
 // PICO_CONFIG: PICO_MAX_SHARED_IRQ_HANDLERS, Maximum number of shared IRQ handlers, default=4, advanced=true, group=hardware_irq
@@ -16,6 +16,11 @@
 // PICO_CONFIG: PICO_DISABLE_SHARED_IRQ_HANDLERS, Disable shared IRQ handlers, type=bool, default=0, group=hardware_irq
 #ifndef PICO_DISABLE_SHARED_IRQ_HANDLERS
 #define PICO_DISABLE_SHARED_IRQ_HANDLERS 0
+#endif
+
+// PICO_CONFIG: PICO_VTABLE_PER_CORE, user is using separate vector tables per core, type=bool, default=0, group=hardware_irq
+#ifndef PICO_VTABLE_PER_CORE
+#define PICO_VTABLE_PER_CORE 0
 #endif
 
 #ifndef __ASSEMBLER__
@@ -256,7 +261,7 @@ void irq_remove_handler(uint num, irq_handler_t handler);
  *  \ingroup hardware_irq
  *
  * \param num Interrupt number \ref interrupt_nums
- * \param return true if the specified IRQ has a shared handler
+ * \return true if the specified IRQ has a shared handler
  */
 bool irq_has_shared_handler(uint num);
 

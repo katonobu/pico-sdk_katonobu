@@ -30,11 +30,13 @@ target_link_libraries(kitchen_sink_libs INTERFACE
     pico_double
     pico_fix_rp2040_usb_device_enumeration
     pico_float
+    pico_i2c_slave
     pico_int64_ops
     pico_malloc
     pico_mem_ops
     pico_multicore
     pico_platform
+    pico_rand
     pico_stdlib
     pico_sync
     pico_time
@@ -129,6 +131,10 @@ if (TARGET pico_cyw43_arch)
     pico_add_extra_outputs(kitchen_sink_lwip_poll)
     target_link_libraries(kitchen_sink_lwip_poll
             pico_cyw43_arch_lwip_poll)
+    if (TARGET pico_btstack)
+        target_link_libraries(kitchen_sink_lwip_poll
+            pico_btstack_ble pico_btstack_classic pico_btstack_cyw43)
+    endif()
     # for lwipopts.h
     target_include_directories(kitchen_sink_lwip_poll PRIVATE
             ${CMAKE_CURRENT_LIST_DIR})
@@ -142,4 +148,17 @@ if (TARGET pico_cyw43_arch)
     target_include_directories(kitchen_sink_lwip_background PRIVATE
             ${CMAKE_CURRENT_LIST_DIR})
 
+    if (TARGET pico_lwip_mbedtls)
+        target_link_libraries(kitchen_sink_lwip_poll pico_lwip_mbedtls)
+        target_link_libraries(kitchen_sink_lwip_background pico_lwip_mbedtls)
+    endif()
+    if (TARGET pico_mbedtls)
+        target_link_libraries(kitchen_sink_lwip_poll pico_mbedtls)
+        target_link_libraries(kitchen_sink_lwip_background pico_mbedtls)
+        suppress_mbedtls_warnings()
+    endif()
+endif()
+
+if (TARGET pico_btstack_base AND COMMAND suppress_btstack_warnings)
+    suppress_btstack_warnings()
 endif()

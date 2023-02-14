@@ -140,7 +140,6 @@ int cyw43_spi_init(cyw43_int_t *self) {
     pio_sm_set_config(bus_data->pio, bus_data->pio_sm, &config);
     pio_sm_set_consecutive_pindirs(bus_data->pio, bus_data->pio_sm, CLOCK_PIN, 1, true);
     gpio_set_function(DATA_OUT_PIN, bus_data->pio_func_sel);
-    gpio_set_function(CLOCK_PIN, bus_data->pio_func_sel);
 
     // Set data pin to pull down and schmitt
     gpio_set_pulls(DATA_IN_PIN, false, true);
@@ -189,9 +188,11 @@ static __noinline void ns_delay(uint32_t ns) {
 
 static void start_spi_comms(cyw43_int_t *self) {
     bus_data_t *bus_data = (bus_data_t *)self->bus_data;
+    gpio_set_function(DATA_OUT_PIN, bus_data->pio_func_sel);
+    gpio_set_function(CLOCK_PIN, bus_data->pio_func_sel);
+    gpio_pull_down(CLOCK_PIN);
     // Pull CS low
     cs_set(false);
-    gpio_set_function(DATA_OUT_PIN, bus_data->pio_func_sel);
 }
 
 // we need to atomically de-assert CS and enable IRQ
@@ -258,16 +259,16 @@ int cyw43_spi_transfer(cyw43_int_t *self, const uint8_t *tx, size_t tx_length, u
 
         dma_channel_config out_config = dma_channel_get_default_config(bus_data->dma_out);
         channel_config_set_bswap(&out_config, true);
-        channel_config_set_dreq(&out_config, pio_get_dreq(bus_data->pio, 0, true));
+        channel_config_set_dreq(&out_config, pio_get_dreq(bus_data->pio, bus_data->pio_sm, true));
 
-        dma_channel_configure(bus_data->dma_out, &out_config, &bus_data->pio->txf[0], tx, tx_length / 4, true);
+        dma_channel_configure(bus_data->dma_out, &out_config, &bus_data->pio->txf[bus_data->pio_sm], tx, tx_length / 4, true);
 
         dma_channel_config in_config = dma_channel_get_default_config(bus_data->dma_in);
         channel_config_set_bswap(&in_config, true);
-        channel_config_set_dreq(&in_config, pio_get_dreq(bus_data->pio, 0, false));
+        channel_config_set_dreq(&in_config, pio_get_dreq(bus_data->pio, bus_data->pio_sm, false));
         channel_config_set_write_increment(&in_config, true);
         channel_config_set_read_increment(&in_config, false);
-        dma_channel_configure(bus_data->dma_in, &in_config, rx + tx_length, &bus_data->pio->rxf[0], rx_length / 4 - tx_length / 4, true);
+        dma_channel_configure(bus_data->dma_in, &in_config, rx + tx_length, &bus_data->pio->rxf[bus_data->pio_sm], rx_length / 4 - tx_length / 4, true);
 
         pio_sm_set_enabled(bus_data->pio, bus_data->pio_sm, true);
         __compiler_memory_barrier();
@@ -299,13 +300,14 @@ int cyw43_spi_transfer(cyw43_int_t *self, const uint8_t *tx, size_t tx_length, u
 
         dma_channel_config out_config = dma_channel_get_default_config(bus_data->dma_out);
         channel_config_set_bswap(&out_config, true);
-        channel_config_set_dreq(&out_config, pio_get_dreq(bus_data->pio, 0, true));
+        channel_config_set_dreq(&out_config, pio_get_dreq(bus_data->pio, bus_data->pio_sm, true));
 
-        dma_channel_configure(bus_data->dma_out, &out_config, &bus_data->pio->txf[0], tx, tx_length / 4, true);
+        dma_channel_configure(bus_data->dma_out, &out_config, &bus_data->pio->txf[bus_data->pio_sm], tx, tx_length / 4, true);
 
-        bus_data->pio->fdebug = 1u << PIO_FDEBUG_TXSTALL_LSB;
-        pio_sm_set_enabled(bus_data->pio, 0, true);
-        while (!(bus_data->pio->fdebug & (1u << PIO_FDEBUG_TXSTALL_LSB))) {
+        uint32_t fdebug_tx_stall = 1u << (PIO_FDEBUG_TXSTALL_LSB + bus_data->pio_sm);
+        bus_data->pio->fdebug = fdebug_tx_stall;
+        pio_sm_set_enabled(bus_data->pio, bus_data->pio_sm, true);
+        while (!(bus_data->pio->fdebug & fdebug_tx_stall)) {
             tight_loop_contents(); // todo timeout
         }
         __compiler_memory_barrier();
@@ -480,12 +482,12 @@ int cyw43_write_reg_u8(cyw43_int_t *self, uint32_t fn, uint32_t reg, uint32_t va
 #error Block size is wrong for SPI
 #endif
 
-// Assumes we're reading into spid_buf
 int cyw43_read_bytes(cyw43_int_t *self, uint32_t fn, uint32_t addr, size_t len, uint8_t *buf) {
     assert(fn != BACKPLANE_FUNCTION || (len <= 64 && (addr + len) <= 0x8000));
     const uint32_t padding = (fn == BACKPLANE_FUNCTION) ? 4 : 0; // Add response delay
     size_t aligned_len = (len + 3) & ~3;
     assert(aligned_len > 0 && aligned_len <= 0x7f8);
+    assert(buf == self->spid_buf || buf < self->spid_buf || buf >= (self->spid_buf + sizeof(self->spid_buf)));
     self->spi_header[padding > 0 ? 0 : 1] = make_cmd(false, true, fn, addr, len + padding);
     if (fn == WLAN_FUNCTION) {
         logic_debug_set(pin_WIFI_RX, 1);

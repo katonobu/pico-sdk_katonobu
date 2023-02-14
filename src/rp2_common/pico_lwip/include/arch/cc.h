@@ -32,9 +32,20 @@
 #ifndef __CC_H__
 #define __CC_H__
 
+#include <sys/time.h>
+
+#ifndef PICO_LWIP_CUSTOM_LOCK_TCPIP_CORE
+#define PICO_LWIP_CUSTOM_LOCK_TCPIP_CORE 1
+#endif
+
 #if NO_SYS
 // todo really we should just not allow SYS_LIGHTWEIGHT_PROT for nosys mode (it doesn't do anything anyway)
 typedef int sys_prot_t;
+#elif PICO_LWIP_CUSTOM_LOCK_TCPIP_CORE
+void pico_lwip_custom_lock_tcpip_core(void);
+void pico_lwip_custom_unlock_tcpip_core(void);
+#define LOCK_TCPIP_CORE() pico_lwip_custom_lock_tcpip_core()
+#define UNLOCK_TCPIP_CORE() pico_lwip_custom_unlock_tcpip_core()
 #endif
 
 /* define compiler specific symbols */
@@ -69,11 +80,14 @@ typedef int sys_prot_t;
 
 #endif
 
-#define LWIP_PLATFORM_ASSERT(x) do { if(!(x)) while(1); } while(0)
+#ifndef LWIP_PLATFORM_ASSERT
+#include "pico.h"
+#define LWIP_PLATFORM_ASSERT(x) panic(x)
+#endif
 
-unsigned int pico_lwip_rand(void);
 #ifndef LWIP_RAND
-// Use ROSC based random number generation, more for the fact that rand() may not be seeded, than anything else
-#define LWIP_RAND pico_lwip_rand
+#include "pico/rand.h"
+// Use the pico_rand library which goes to reasonable lengths to try to provide good entropy
+#define LWIP_RAND() get_rand_32()
 #endif
 #endif /* __CC_H__ */

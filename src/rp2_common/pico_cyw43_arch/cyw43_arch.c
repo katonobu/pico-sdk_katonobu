@@ -14,13 +14,19 @@
 #include "cyw43_ll.h"
 #include "cyw43_stats.h"
 
-#if CYW43_ARCH_DEBUG_ENABLED
+#if PICO_CYW43_ARCH_DEBUG_ENABLED
 #define CYW43_ARCH_DEBUG(...) printf(__VA_ARGS__)
 #else
 #define CYW43_ARCH_DEBUG(...) ((void)0)
 #endif
 
 static uint32_t country_code = PICO_CYW43_ARCH_DEFAULT_COUNTRY_CODE;
+
+static async_context_t *async_context;
+
+void cyw43_arch_set_async_context(async_context_t *context) {
+    async_context = context;
+}
 
 void cyw43_arch_enable_sta_mode() {
     assert(cyw43_is_initialized(&cyw43_state));
@@ -39,9 +45,9 @@ void cyw43_arch_enable_ap_mode(const char *ssid, const char *password, uint32_t 
     cyw43_wifi_set_up(&cyw43_state, CYW43_ITF_AP, true, cyw43_arch_get_country_code());
 }
 
-#if CYW43_ARCH_DEBUG_ENABLED
+#if PICO_CYW43_ARCH_DEBUG_ENABLED
 // Return a string for the wireless state
-static const char* status_name(int status)
+static const char* cyw43_tcpip_link_status_name(int status)
 {
     switch (status) {
     case CYW43_LINK_DOWN:
@@ -63,64 +69,71 @@ static const char* status_name(int status)
 }
 #endif
 
-int cyw43_arch_wifi_connect_async(const char *ssid, const char *pw, uint32_t auth) {
+
+int cyw43_arch_wifi_connect_bssid_async(const char *ssid, const uint8_t *bssid, const char *pw, uint32_t auth) {
     if (!pw) auth = CYW43_AUTH_OPEN;
     // Connect to wireless
-    return cyw43_wifi_join(&cyw43_state, strlen(ssid), (const uint8_t *)ssid, pw ? strlen(pw) : 0, (const uint8_t *)pw, auth, NULL, CYW43_ITF_STA);
+    return cyw43_wifi_join(&cyw43_state, strlen(ssid), (const uint8_t *)ssid, pw ? strlen(pw) : 0, (const uint8_t *)pw, auth, bssid, CYW43_CHANNEL_NONE);
 }
 
-// Connect to wireless, return with success when an IP address has been assigned
-int cyw43_arch_wifi_connect_until(const char *ssid, const char *pw, uint32_t auth, absolute_time_t until) {
-    int err = cyw43_arch_wifi_connect_async(ssid, pw, auth);
+int cyw43_arch_wifi_connect_async(const char *ssid, const char *pw, uint32_t auth) {
+    return cyw43_arch_wifi_connect_bssid_async(ssid, NULL, pw, auth);
+}
+
+static int cyw43_arch_wifi_connect_bssid_until(const char *ssid, const uint8_t *bssid, const char *pw, uint32_t auth, absolute_time_t until) {
+    int err = cyw43_arch_wifi_connect_bssid_async(ssid, bssid, pw, auth);
     if (err) return err;
 
     int status = CYW43_LINK_UP + 1;
     while(status >= 0 && status != CYW43_LINK_UP) {
         int new_status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
+        // If there was no network, keep trying
+        if (new_status == CYW43_LINK_NONET) {
+            new_status = CYW43_LINK_JOIN;
+            err = cyw43_arch_wifi_connect_bssid_async(ssid, bssid, pw, auth);
+            if (err) return err;
+        }
         if (new_status != status) {
             status = new_status;
-            CYW43_ARCH_DEBUG("connect status: %s\n", status_name(status));
+            CYW43_ARCH_DEBUG("connect status: %s\n", cyw43_tcpip_link_status_name(status));
         }
-        // in case polling is required
-        cyw43_arch_poll();
-        best_effort_wfe_or_timeout(until);
         if (time_reached(until)) {
             return PICO_ERROR_TIMEOUT;
         }
+        // Do polling
+        cyw43_arch_poll();
+        cyw43_arch_wait_for_work_until(until);
     }
-    return status == CYW43_LINK_UP ? 0 : status;
+    // Turn status into a pico_error_codes, CYW43_LINK_NONET shouldn't happen as we fail with PICO_ERROR_TIMEOUT instead
+    assert(status == CYW43_LINK_UP || status == CYW43_LINK_BADAUTH || status == CYW43_LINK_FAIL);
+    if (status == CYW43_LINK_UP) {
+        return PICO_OK; // success
+    } else if (status == CYW43_LINK_BADAUTH) {
+        return PICO_ERROR_BADAUTH;
+    } else {
+        return PICO_ERROR_CONNECT_FAILED;
+    }
+}
+
+// Connect to wireless, return with success when an IP address has been assigned
+static int cyw43_arch_wifi_connect_until(const char *ssid, const char *pw, uint32_t auth, absolute_time_t until) {
+    return cyw43_arch_wifi_connect_bssid_until(ssid, NULL, pw, auth, until);
 }
 
 int cyw43_arch_wifi_connect_blocking(const char *ssid, const char *pw, uint32_t auth) {
     return cyw43_arch_wifi_connect_until(ssid, pw, auth, at_the_end_of_time);
 }
 
+int cyw43_arch_wifi_connect_bssid_blocking(const char *ssid, const uint8_t *bssid, const char *pw, uint32_t auth) {
+    return cyw43_arch_wifi_connect_bssid_until(ssid, bssid, pw, auth, at_the_end_of_time);
+}
+
 int cyw43_arch_wifi_connect_timeout_ms(const char *ssid, const char *pw, uint32_t auth, uint32_t timeout_ms) {
     return cyw43_arch_wifi_connect_until(ssid, pw, auth, make_timeout_time_ms(timeout_ms));
 }
 
-// todo maybe add an #ifdef in cyw43_driver
-uint32_t storage_read_blocks(__unused uint8_t *dest, __unused uint32_t block_num, __unused uint32_t num_blocks) {
-    // shouldn't be used
-    panic_unsupported();
-}
-
-// Generate a mac address if one is not set in otp
-void cyw43_hal_generate_laa_mac(__unused int idx, uint8_t buf[6]) {
-    CYW43_DEBUG("Warning. No mac in otp. Generating mac from board id\n");
-    pico_unique_board_id_t board_id;
-    pico_get_unique_board_id(&board_id);
-    memcpy(buf, &board_id.id[2], 6);
-    buf[0] &= (uint8_t)~0x1; // unicast
-    buf[0] |= 0x2; // locally administered
-}
-
-// Return mac address
-void cyw43_hal_get_mac(__unused int idx, uint8_t buf[6]) {
-    // The mac should come from cyw43 otp.
-    // This is loaded into the state after the driver is initialised
-    // cyw43_hal_generate_laa_mac is called by the driver to generate a mac if otp is not set
-    memcpy(buf, cyw43_state.mac, 6);
+int cyw43_arch_wifi_connect_bssid_timeout_ms(const char *ssid, const uint8_t *bssid, const char *pw, uint32_t auth, uint32_t timeout_ms) {
+    return cyw43_arch_wifi_connect_bssid_until(ssid, bssid, pw, auth, make_timeout_time_ms(timeout_ms));
 }
 
 uint32_t cyw43_arch_get_country_code(void) {
@@ -142,4 +155,17 @@ bool cyw43_arch_gpio_get(uint wl_gpio) {
     bool value = false;
     cyw43_gpio_get(&cyw43_state, (int)wl_gpio, &value);
     return value;
+}
+
+async_context_t *cyw43_arch_async_context(void) {
+    return async_context;
+}
+
+void cyw43_arch_poll(void)
+{
+    async_context_poll(async_context);
+}
+
+void cyw43_arch_wait_for_work_until(absolute_time_t until) {
+    async_context_wait_for_work_until(async_context, until);
 }

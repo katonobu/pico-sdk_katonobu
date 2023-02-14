@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef _HARDWARE_GPIO_H_
-#define _HARDWARE_GPIO_H_
+#ifndef _HARDWARE_GPIO_H
+#define _HARDWARE_GPIO_H
 
 #include "pico.h"
 #include "hardware/structs/sio.h"
@@ -85,7 +85,7 @@ extern "C" {
  * selected on one GPIO at a time. If the same peripheral input is connected to multiple GPIOs, the peripheral sees the logical
  * OR of these GPIO inputs.
  *
- * Please refer to the datsheet for more information on GPIO function selection.
+ * Please refer to the datasheet for more information on GPIO function selection.
  */
 enum gpio_function {
     GPIO_FUNC_XIP = 0,
@@ -476,9 +476,8 @@ static inline uint32_t gpio_get_irq_event_mask(uint gpio) {
  * the opposite level).
  *
  * \param gpio GPIO number
- * \param events Bitmask of events to clear. See \ref gpio_set_irq_enabled for details.
  *
- * \note For callbacks set with \ref gpio_set_irq_enabled_with_callback, or \ref gpio_set_irq_callback,this function is called automatically.
+ * \note For callbacks set with \ref gpio_set_irq_enabled_with_callback, or \ref gpio_set_irq_callback, this function is called automatically.
  * \param event_mask Bitmask of events to clear. See \ref gpio_irq_level for details.
  */
 void gpio_acknowledge_irq(uint gpio, uint32_t event_mask);

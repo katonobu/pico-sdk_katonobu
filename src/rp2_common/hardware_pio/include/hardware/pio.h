@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef _HARDWARE_PIO_H_
-#define _HARDWARE_PIO_H_
+#ifndef _HARDWARE_PIO_H
+#define _HARDWARE_PIO_H
 
 #include "pico.h"
 #include "hardware/address_mapped.h"
@@ -580,7 +580,7 @@ static inline void pio_set_sm_mask_enabled(PIO pio, uint32_t mask, bool enabled)
 static inline void pio_sm_restart(PIO pio, uint sm) {
     check_pio_param(pio);
     check_sm_param(sm);
-    pio->ctrl |= 1u << (PIO_CTRL_SM_RESTART_LSB + sm);
+    hw_set_bits(&pio->ctrl, 1u << (PIO_CTRL_SM_RESTART_LSB + sm));
 }
 
 /*! \brief Restart multiple state machine with a known state
@@ -595,7 +595,7 @@ static inline void pio_sm_restart(PIO pio, uint sm) {
 static inline void pio_restart_sm_mask(PIO pio, uint32_t mask) {
     check_pio_param(pio);
     check_sm_mask(mask);
-    pio->ctrl |= (mask << PIO_CTRL_SM_RESTART_LSB) & PIO_CTRL_SM_RESTART_BITS;
+    hw_set_bits(&pio->ctrl, (mask << PIO_CTRL_SM_RESTART_LSB) & PIO_CTRL_SM_RESTART_BITS);
 }
 
 /*! \brief Restart a state machine's clock divider from a phase of 0
@@ -622,7 +622,7 @@ static inline void pio_restart_sm_mask(PIO pio, uint32_t mask) {
 static inline void pio_sm_clkdiv_restart(PIO pio, uint sm) {
     check_pio_param(pio);
     check_sm_param(sm);
-    pio->ctrl |= 1u << (PIO_CTRL_CLKDIV_RESTART_LSB + sm);
+    hw_set_bits(&pio->ctrl, 1u << (PIO_CTRL_CLKDIV_RESTART_LSB + sm));
 }
 
 /*! \brief Restart multiple state machines' clock dividers from a phase of 0.
@@ -657,7 +657,7 @@ static inline void pio_sm_clkdiv_restart(PIO pio, uint sm) {
 static inline void pio_clkdiv_restart_sm_mask(PIO pio, uint32_t mask) {
     check_pio_param(pio);
     check_sm_mask(mask);
-    pio->ctrl |= (mask << PIO_CTRL_CLKDIV_RESTART_LSB) & PIO_CTRL_CLKDIV_RESTART_BITS;
+    hw_set_bits(&pio->ctrl, (mask << PIO_CTRL_CLKDIV_RESTART_LSB) & PIO_CTRL_CLKDIV_RESTART_BITS);
 }
 
 /*! \brief Enable multiple PIO state machines synchronizing their clock dividers
@@ -674,8 +674,9 @@ static inline void pio_clkdiv_restart_sm_mask(PIO pio, uint32_t mask) {
 static inline void pio_enable_sm_mask_in_sync(PIO pio, uint32_t mask) {
     check_pio_param(pio);
     check_sm_mask(mask);
-    pio->ctrl |= ((mask << PIO_CTRL_CLKDIV_RESTART_LSB) & PIO_CTRL_CLKDIV_RESTART_BITS) |
-                 ((mask << PIO_CTRL_SM_ENABLE_LSB) & PIO_CTRL_SM_ENABLE_BITS);
+    hw_set_bits(&pio->ctrl,
+        ((mask << PIO_CTRL_CLKDIV_RESTART_LSB) & PIO_CTRL_CLKDIV_RESTART_BITS) |
+        ((mask << PIO_CTRL_SM_ENABLE_LSB) & PIO_CTRL_SM_ENABLE_BITS));
 }
 
 /*! \brief PIO interrupt source numbers for pio related IRQs
@@ -818,7 +819,7 @@ static inline bool pio_interrupt_get(PIO pio, uint pio_interrupt_num) {
 static inline void pio_interrupt_clear(PIO pio, uint pio_interrupt_num) {
     check_pio_param(pio);
     invalid_params_if(PIO, pio_interrupt_num >= 8);
-    hw_set_bits(&pio->irq, (1u << pio_interrupt_num));
+    pio->irq = (1u << pio_interrupt_num);
 }
 
 /*! \brief Return the current program counter for a state machine

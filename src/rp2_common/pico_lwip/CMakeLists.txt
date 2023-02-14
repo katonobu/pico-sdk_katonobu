@@ -6,10 +6,10 @@ endif ()
 set(LWIP_TEST_PATH "src/Filelists.cmake")
 if (NOT PICO_LWIP_PATH)
     set(PICO_LWIP_PATH ${PROJECT_SOURCE_DIR}/lib/lwip)
-#    if (NOT EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
-#        message(WARNING "LWIP submodule has not been initialized; Pico W wireless support will be unavailable
+    if (PICO_CYW43_SUPPORTED AND NOT EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
+        message(WARNING "LWIP submodule has not been initialized; Pico W wireless support will be unavailable
 #hint: try 'git submodule update --init' from your SDK directory (${PICO_SDK_PATH}).")
-#    endif()
+    endif()
 elseif (NOT EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
     message(WARNING "PICO_LWIP_PATH specified but content not present.")
 endif()
@@ -24,7 +24,7 @@ if (EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
     pico_register_common_scope_var(PICO_LWIP_PATH)
 
     # The minimum set of files needed for lwIP.
-    add_library(pico_lwip_core INTERFACE)
+    pico_add_library(pico_lwip_core NOFLAG)
     target_sources(pico_lwip_core INTERFACE
             ${PICO_LWIP_PATH}/src/core/init.c
             ${PICO_LWIP_PATH}/src/core/def.c
@@ -46,14 +46,12 @@ if (EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
             ${PICO_LWIP_PATH}/src/core/tcp_out.c
             ${PICO_LWIP_PATH}/src/core/timeouts.c
             ${PICO_LWIP_PATH}/src/core/udp.c
-            ${CMAKE_CURRENT_LIST_DIR}/random.c
             )
-    target_include_directories(pico_lwip_core INTERFACE
+    target_include_directories(pico_lwip_core_headers INTERFACE
             ${PICO_LWIP_PATH}/src/include)
 
-    add_library(pico_lwip_core4 INTERFACE)
+    pico_add_library(pico_lwip_core4 NOFLAG)
     target_sources(pico_lwip_core4 INTERFACE
-            ${PICO_LWIP_PATH}/src/core/ipv4/acd.c
             ${PICO_LWIP_PATH}/src/core/ipv4/autoip.c
             ${PICO_LWIP_PATH}/src/core/ipv4/dhcp.c
             ${PICO_LWIP_PATH}/src/core/ipv4/etharp.c
@@ -64,7 +62,14 @@ if (EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
             ${PICO_LWIP_PATH}/src/core/ipv4/ip4_addr.c
             )
 
-    add_library(pico_lwip_core6 INTERFACE)
+    # Doesn't exists in version earlier than 2.1.3
+    if (EXISTS ${PICO_LWIP_PATH}/src/core/ipv4/acd.c)
+        target_sources(pico_lwip_core4 INTERFACE
+            ${PICO_LWIP_PATH}/src/core/ipv4/acd.c
+            )
+    endif()
+
+    pico_add_library(pico_lwip_core6 NOFLAG)
     target_sources(pico_lwip_core6 INTERFACE
             ${PICO_LWIP_PATH}/src/core/ipv6/dhcp6.c
             ${PICO_LWIP_PATH}/src/core/ipv6/ethip6.c
@@ -78,7 +83,7 @@ if (EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
             )
 
     # APIFILES: The files which implement the sequential and socket APIs.
-    add_library(pico_lwip_api INTERFACE)
+    pico_add_library(pico_lwip_api NOFLAG)
     target_sources(pico_lwip_api INTERFACE
             ${PICO_LWIP_PATH}/src/api/api_lib.c
             ${PICO_LWIP_PATH}/src/api/api_msg.c
@@ -92,7 +97,7 @@ if (EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
             )
 
     # Files implementing various generic network interface functions
-    add_library(pico_lwip_netif INTERFACE)
+    pico_add_library(pico_lwip_netif NOFLAG)
     target_sources(pico_lwip_netif INTERFACE
             ${PICO_LWIP_PATH}/src/netif/ethernet.c
             ${PICO_LWIP_PATH}/src/netif/bridgeif.c
@@ -101,7 +106,7 @@ if (EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
             )
 
     # 6LoWPAN
-    add_library(pico_lwip_sixlowpan INTERFACE)
+    pico_add_library(pico_lwip_sixlowpan NOFLAG)
     target_sources(pico_lwip_sixlowpan INTERFACE
             ${PICO_LWIP_PATH}/src/netif/lowpan6_common.c
             ${PICO_LWIP_PATH}/src/netif/lowpan6.c
@@ -110,7 +115,7 @@ if (EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
             )
 
     # PPP
-    add_library(pico_lwip_ppp INTERFACE)
+    pico_add_library(pico_lwip_ppp NOFLAG)
     target_sources(pico_lwip_ppp INTERFACE
             ${PICO_LWIP_PATH}/src/netif/ppp/auth.c
             ${PICO_LWIP_PATH}/src/netif/ppp/ccp.c
@@ -145,7 +150,7 @@ if (EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
             )
 
     # SNMPv3 agent
-    add_library(pico_lwip_snmp INTERFACE)
+    pico_add_library(pico_lwip_snmp NOFLAG)
     target_sources(pico_lwip_snmp INTERFACE
             ${PICO_LWIP_PATH}/src/apps/snmp/snmp_asn1.c
             ${PICO_LWIP_PATH}/src/apps/snmp/snmp_core.c
@@ -171,7 +176,7 @@ if (EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
             )
 
     # HTTP server + client
-    add_library(pico_lwip_http INTERFACE)
+    pico_add_library(pico_lwip_http NOFLAG)
     target_sources(pico_lwip_http INTERFACE
             ${PICO_LWIP_PATH}/src/apps/http/altcp_proxyconnect.c
             ${PICO_LWIP_PATH}/src/apps/http/fs.c
@@ -180,61 +185,72 @@ if (EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
             )
 
     # MAKEFSDATA HTTP server host utility
-    add_library(pico_lwip_makefsdata INTERFACE)
+    pico_add_library(pico_lwip_makefsdata NOFLAG)
     target_sources(pico_lwip_makefsdata INTERFACE
             ${PICO_LWIP_PATH}/src/apps/http/makefsdata/makefsdata.c
             )
 
     # iperf
-    add_library(pico_lwip_iperf INTERFACE)
+    pico_add_library(pico_lwip_iperf NOFLAG)
     target_sources(pico_lwip_iperf INTERFACE
             ${PICO_LWIP_PATH}/src/apps/lwiperf/lwiperf.c
             )
 
     # SMTP client
-    add_library(pico_lwip_smtp INTERFACE)
+    pico_add_library(pico_lwip_smtp NOFLAG)
     target_sources(pico_lwip_smtp INTERFACE
             ${PICO_LWIP_PATH}/src/apps/smtp/smtp.c
             )
 
     # SNTP client
-    add_library(pico_lwip_sntp INTERFACE)
+    pico_add_library(pico_lwip_sntp NOFLAG)
     target_sources(pico_lwip_sntp INTERFACE
             ${PICO_LWIP_PATH}/src/apps/sntp/sntp.c
             )
 
     # MDNS responder
-    add_library(pico_lwip_mdns INTERFACE)
+    pico_add_library(pico_lwip_mdns NOFLAG)
     target_sources(pico_lwip_mdns INTERFACE
             ${PICO_LWIP_PATH}/src/apps/mdns/mdns.c
-            ${PICO_LWIP_PATH}/src/apps/mdns/mdns_out.c
-            ${PICO_LWIP_PATH}/src/apps/mdns/mdns_domain.c
             )
 
+    # Old versions of lwip had everything in mdns.c
+    if (EXISTS ${PICO_LWIP_PATH}/src/apps/mdns/mdns_out.c)
+        target_sources(pico_lwip_mdns INTERFACE
+                ${PICO_LWIP_PATH}/src/apps/mdns/mdns_out.c
+                ${PICO_LWIP_PATH}/src/apps/mdns/mdns_domain.c
+                )
+    endif()
+
     # NetBIOS name server
-    add_library(pico_lwip_netbios INTERFACE)
+    pico_add_library(pico_lwip_netbios NOFLAG)
     target_sources(pico_lwip_netbios INTERFACE
             ${PICO_LWIP_PATH}/src/apps/netbiosns/netbiosns.c
             )
 
     # TFTP server files
-    add_library(pico_lwip_tftp INTERFACE)
+    pico_add_library(pico_lwip_tftp NOFLAG)
     target_sources(pico_lwip_tftp INTERFACE
             ${PICO_LWIP_PATH}/src/apps/tftp/tftp.c
             )
 
-    # MQTT client files
-    add_library(pico_lwip_mbedtls INTERFACE)
+    # Mbed TLS files
+    pico_add_library(pico_lwip_mbedtls NOFLAG)
     target_sources(pico_lwip_mbedtls INTERFACE
             ${PICO_LWIP_PATH}/src/apps/altcp_tls/altcp_tls_mbedtls.c
             ${PICO_LWIP_PATH}/src/apps/altcp_tls/altcp_tls_mbedtls_mem.c
             ${PICO_LWIP_PATH}/src/apps/snmp/snmpv3_mbedtls.c
             )
 
+    # MQTT client files
+    pico_add_library(pico_lwip_mqtt NOFLAG)
+    target_sources(pico_lwip_mqtt INTERFACE
+            ${PICO_LWIP_PATH}/src/apps/mqtt/mqtt.c
+            )
 
     # All LWIP files without apps
-    add_library(pico_lwip INTERFACE)
-    target_link_libraries(pico_lwip INTERFACE
+    pico_add_library(pico_lwip NOFLAG)
+    pico_mirrored_target_link_libraries(pico_lwip INTERFACE
         pico_lwip_core
         pico_lwip_core4
         pico_lwip_core6
@@ -245,18 +261,20 @@ if (EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
     )
 
     # our arch/cc.h
-    add_library(pico_lwip_arch INTERFACE)
-    target_include_directories(pico_lwip_arch INTERFACE
+    pico_add_library(pico_lwip_arch NOFLAG)
+    target_include_directories(pico_lwip_arch_headers INTERFACE
             ${CMAKE_CURRENT_LIST_DIR}/include)
+    target_link_libraries(pico_lwip_arch INTERFACE pico_rand)
 
     # our nosys impl
-    add_library(pico_lwip_nosys INTERFACE)
+    pico_add_library(pico_lwip_nosys NOFLAG)
     target_sources(pico_lwip_nosys INTERFACE
-            ${CMAKE_CURRENT_LIST_DIR}/nosys.c
+            ${CMAKE_CURRENT_LIST_DIR}/lwip_nosys.c
             )
-    target_link_libraries(pico_lwip_nosys INTERFACE
-            pico_lwip_arch)
-
+    pico_mirrored_target_link_libraries(pico_lwip_nosys INTERFACE
+            pico_async_context_base
+            pico_lwip_arch
+            pico_lwip)
 
     if (NOT PICO_LWIP_CONTRIB_PATH)
         set(PICO_LWIP_CONTRIB_PATH ${PICO_LWIP_PATH}/contrib)
@@ -264,15 +282,25 @@ if (EXISTS ${PICO_LWIP_PATH}/${LWIP_TEST_PATH})
     pico_register_common_scope_var(PICO_LWIP_CONTRIB_PATH)
 
     # Make lwip_contrib_freertos library, with the FreeRTOS/lwIP code from lwip-contrib
-    add_library(pico_lwip_contrib_freertos INTERFACE)
+    pico_add_library(pico_lwip_contrib_freertos NOFLAG)
     target_sources(pico_lwip_contrib_freertos INTERFACE
             ${PICO_LWIP_CONTRIB_PATH}/ports/freertos/sys_arch.c
             )
-    target_include_directories(pico_lwip_contrib_freertos INTERFACE
+    target_include_directories(pico_lwip_contrib_freertos_headers INTERFACE
             ${PICO_LWIP_CONTRIB_PATH}/ports/freertos/include
             )
-    target_link_libraries(pico_lwip_contrib_freertos INTERFACE
+    pico_mirrored_target_link_libraries(pico_lwip_contrib_freertos INTERFACE
             pico_lwip_arch)
+
+    pico_add_library(pico_lwip_freertos NOFLAG)
+    target_sources(pico_lwip_freertos INTERFACE
+            ${CMAKE_CURRENT_LIST_DIR}/lwip_freertos.c
+            )
+    pico_mirrored_target_link_libraries(pico_lwip_freertos INTERFACE
+            pico_async_context_base
+            pico_lwip
+            pico_lwip_contrib_freertos
+            pico_rand)
 
     pico_promote_common_scope_vars()
 endif()

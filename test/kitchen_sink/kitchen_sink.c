@@ -33,23 +33,25 @@
 #include "pico/binary_info.h"
 #include "pico/bit_ops.h"
 #include "pico/bootrom.h"
+#if LIB_PICO_CYW43_ARCH
+#include "pico/cyw43_arch.h"
+#endif
 #include "pico/divider.h"
 #include "pico/double.h"
 #include "pico/fix/rp2040_usb_device_enumeration.h"
 #include "pico/float.h"
 #include "pico/int64_ops.h"
+#include "pico/i2c_slave.h"
 #include "pico/malloc.h"
 #include "pico/multicore.h"
 #include "pico/printf.h"
+#include "pico/rand.h"
 #include "pico/runtime.h"
 #include "pico/stdio.h"
 #include "pico/stdlib.h"
 #include "pico/sync.h"
 #include "pico/time.h"
 #include "pico/unique_id.h"
-#if LIB_PICO_CYW43_ARCH
-#include "pico/cyw43_arch.h"
-#endif
 
 #include "hardware/structs/adc.h"
 #include "hardware/structs/bus_ctrl.h"
@@ -82,7 +84,13 @@
 #include "hardware/structs/watchdog.h"
 #include "hardware/structs/xip_ctrl.h"
 #include "hardware/structs/xosc.h"
-        
+
+#if LIB_PICO_MBEDTLS
+#include "mbedtls/ssl.h"
+#include "lwip/altcp_tcp.h"
+#include "lwip/altcp_tls.h"
+#endif
+
 bi_decl(bi_block_device(
                            BINARY_INFO_MAKE_TAG('K', 'S'),
                            "foo",

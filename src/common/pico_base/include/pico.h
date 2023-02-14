@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef PICO_H_
-#define PICO_H_
+#ifndef _PICO_H
+#define _PICO_H
 
 /** \file pico.h
  *  \defgroup pico_base pico_base
@@ -16,8 +16,10 @@
  * This header may be included by assembly code
 */
 
+// We may be included by assembly which cant include <cdefs.h>
 #define	__PICO_STRING(x)	#x
 #define	__PICO_XSTRING(x)	__PICO_STRING(x)
+#define __PICO_CONCAT1(x, y) x ## y
 
 #include "pico/types.h"
 #include "pico/version.h"

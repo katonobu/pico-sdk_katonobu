@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef _HARDWARE_DMA_H_
-#define _HARDWARE_DMA_H_
+#ifndef _HARDWARE_DMA_H
+#define _HARDWARE_DMA_H
 
 #include "pico.h"
 #include "hardware/structs/dma.h"
@@ -157,7 +157,6 @@ static inline void channel_config_set_read_increment(dma_channel_config *c, bool
  * \param c Pointer to channel configuration object
  * \param incr True to enable write address increments, if false, each write will be to the same address
  *             Usually disabled for memory to peripheral transfers
- * Usually disabled for memory to peripheral transfers
  */
 static inline void channel_config_set_write_increment(dma_channel_config *c, bool incr) {
     c->ctrl = incr ? (c->ctrl | DMA_CH0_CTRL_TRIG_INCR_WRITE_BITS) : (c->ctrl & ~DMA_CH0_CTRL_TRIG_INCR_WRITE_BITS);
@@ -665,7 +664,7 @@ static inline bool dma_irqn_get_channel_status(uint irq_index, uint channel) {
  */
 static inline void dma_channel_acknowledge_irq0(uint channel) {
     check_dma_channel_param(channel);
-    hw_set_bits(&dma_hw->ints0, (1u << channel));
+    dma_hw->ints0 = 1u << channel;
 }
 
 /*! \brief  Acknowledge a channel IRQ, resetting it as the cause of DMA_IRQ_1
@@ -675,7 +674,7 @@ static inline void dma_channel_acknowledge_irq0(uint channel) {
  */
 static inline void dma_channel_acknowledge_irq1(uint channel) {
     check_dma_channel_param(channel);
-    hw_set_bits(&dma_hw->ints1, (1u << channel));
+    dma_hw->ints1 = 1u << channel;
 }
 
 /*! \brief  Acknowledge a channel IRQ, resetting it as the cause of DMA_IRQ_N
@@ -687,7 +686,10 @@ static inline void dma_channel_acknowledge_irq1(uint channel) {
 static inline void dma_irqn_acknowledge_channel(uint irq_index, uint channel) {
     invalid_params_if(DMA, irq_index > 1);
     check_dma_channel_param(channel);
-    hw_set_bits(irq_index ? &dma_hw->ints1 : &dma_hw->ints0, (1u << channel));
+    if (irq_index)
+        dma_hw->ints1 = 1u << channel;
+    else
+        dma_hw->ints0 = 1u << channel;
 }
 
 /*! \brief  Check if DMA channel is busy
@@ -738,9 +740,13 @@ inline static void dma_sniffer_enable(uint channel, uint mode, bool force_channe
     if (force_channel_enable) {
         hw_set_bits(&dma_hw->ch[channel].al1_ctrl, DMA_CH0_CTRL_TRIG_SNIFF_EN_BITS);
     }
-    dma_hw->sniff_ctrl = ((channel << DMA_SNIFF_CTRL_DMACH_LSB) & DMA_SNIFF_CTRL_DMACH_BITS) |
-                         ((mode << DMA_SNIFF_CTRL_CALC_LSB) & DMA_SNIFF_CTRL_CALC_BITS) |
-                         DMA_SNIFF_CTRL_EN_BITS;
+    hw_write_masked(&dma_hw->sniff_ctrl,
+        (((channel << DMA_SNIFF_CTRL_DMACH_LSB) & DMA_SNIFF_CTRL_DMACH_BITS) |
+         ((mode << DMA_SNIFF_CTRL_CALC_LSB) & DMA_SNIFF_CTRL_CALC_BITS) |
+         DMA_SNIFF_CTRL_EN_BITS),
+        (DMA_SNIFF_CTRL_DMACH_BITS |
+         DMA_SNIFF_CTRL_CALC_BITS |
+         DMA_SNIFF_CTRL_EN_BITS));
 }
 
 /*! \brief Enable the Sniffer byte swap function
@@ -761,12 +767,63 @@ inline static void dma_sniffer_set_byte_swap_enabled(bool swap) {
         hw_clear_bits(&dma_hw->sniff_ctrl, DMA_SNIFF_CTRL_BSWAP_BITS);
 }
 
+/*! \brief Enable the Sniffer output invert function
+ *  \ingroup hardware_dma
+ *
+ * If enabled, the sniff data result appears bit-inverted when read.
+ * This does not affect the way the checksum is calculated.
+ *
+ * \param invert Set true to enable output bit inversion
+ */
+inline static void dma_sniffer_set_output_invert_enabled(bool invert) {
+    if (invert)
+        hw_set_bits(&dma_hw->sniff_ctrl, DMA_SNIFF_CTRL_OUT_INV_BITS);
+    else
+        hw_clear_bits(&dma_hw->sniff_ctrl, DMA_SNIFF_CTRL_OUT_INV_BITS);
+}
+
+/*! \brief Enable the Sniffer output bit reversal function
+ *  \ingroup hardware_dma
+ *
+ * If enabled, the sniff data result appears bit-reversed when read.
+ * This does not affect the way the checksum is calculated.
+ *
+ * \param reverse Set true to enable output bit reversal
+ */
+inline static void dma_sniffer_set_output_reverse_enabled(bool reverse) {
+    if (reverse)
+        hw_set_bits(&dma_hw->sniff_ctrl, DMA_SNIFF_CTRL_OUT_REV_BITS);
+    else
+        hw_clear_bits(&dma_hw->sniff_ctrl, DMA_SNIFF_CTRL_OUT_REV_BITS);
+}
+
 /*! \brief Disable the DMA sniffer
  *  \ingroup hardware_dma
  *
  */
 inline static void dma_sniffer_disable(void) {
     dma_hw->sniff_ctrl = 0;
+}
+
+/*! \brief Set the sniffer's data accumulator with initial value
+ *  \ingroup hardware_dma
+ *
+ * Generally, CRC algorithms are used with the data accumulator initially
+ * seeded with 0xFFFF or 0xFFFFFFFF (for crc16 and crc32 algorithms)
+ *
+ * \param seed_value value to set data accumulator
+ */
+inline static void dma_sniffer_set_data_accumulator(uint32_t seed_value) {
+    dma_hw->sniff_data = seed_value;
+}
+
+/*! \brief Get the sniffer's data accumulator value
+ *  \ingroup hardware_dma
+ *
+ * Read value calculated by the hardware from sniffing the DMA stream
+ */
+inline static uint32_t dma_sniffer_get_data_accumulator(void) {
+    return dma_hw->sniff_data;
 }
 
 /*! \brief Mark a dma timer as used
